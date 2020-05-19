@@ -5,6 +5,7 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using System.Collections;
+using Mirror.Websocket;
 
 public class LobbyNetworkManager : NetworkManager{
     [Scene]
@@ -22,28 +23,77 @@ public class LobbyNetworkManager : NetworkManager{
     [SerializeField]
     private PlayerListController playerListController;
 
+    [SerializeField]
+    private GameObject spawnManagerPrefab;
+    [SerializeField]
+    private GameObject mazeGeneratorPrefab;
+    private GameObject mazeGenerator;
+
     public static event Action OnClientConnected;
     public static event Action OnClientDisconnected;
-    public static event Action<NetworkConnection> OnClientReady;
+    public static event Action<NetworkConnection> OnServerReadied;
 
     public List<LobbyPlayer> lobbyPlayers { get; } = new List<LobbyPlayer>();
 
     public List<PlayerController> gamePlayers { get; } = new List<PlayerController>();
 
-    public override void OnStartServer() => spawnPrefabs = Resources.LoadAll<GameObject>("SpawnablePrefabs").ToList();
+    public override void OnStartHost() {
+        Debug.Log("[LobbyNetworkManager] Host started");
+        base.OnStartHost();
+    }
 
-    [SerializeField]
-    private GameObject spawnManagerPrefab;
+    public override void OnStartServer() {
+        Debug.Log("[LobbyNetworkManager] Server started");
+        spawnPrefabs = Resources.LoadAll<GameObject>("SpawnablePrefabs").ToList();
+        MazeGenerator.mazeGenerated += PositionPlayers;
+    }
+
+    //disconnect the client trying to connect if the maximum connections is exceeded or were not in the main menu
+    public override void OnServerConnect(NetworkConnection conn) {
+        if(numPlayers >= maxConnections) {
+            Debug.Log("[LobbyNetworkManager] Disconnected new connection: exceeded max connections");
+            conn.Disconnect();
+            return;
+        }
+
+        if(SceneManager.GetActiveScene().buildIndex != 0) {
+            Debug.Log("[LobbyNetworkManager] Disconnected new connection: no new connections accepted");
+            conn.Disconnect();
+            return;
+        }
+    }
+
+    public override void OnServerReady(NetworkConnection conn) {
+        Debug.Log("[LobbyNetworkManager] Client ready on server");
+        base.OnServerReady(conn);
+        OnServerReadied?.Invoke(conn);
+    }
 
     public override void OnStartClient() {
+
+        Debug.Log("[LobbyNetworkManager] Client started");
+
         var spawnablePrefabs = Resources.LoadAll<GameObject>("SpawnablePrefabs");
 
-        foreach(var prefab in spawnablePrefabs) {
+        foreach (var prefab in spawnablePrefabs) {
             ClientScene.RegisterPrefab(prefab);
         }
 
         ClientScene.RegisterPrefab(lobbyPlayerPrefab.gameObject);
-        ClientScene.RegisterPrefab(mazePlayerPrefab.gameObject);
+        //ClientScene.RegisterPrefab(mazePlayerPrefab.gameObject);
+        ClientScene.RegisterPrefab(mazeGeneratorPrefab.gameObject);
+
+    }
+
+    public override void OnClientConnect(NetworkConnection conn) {
+        Debug.Log("[LobbyNetworkManager] Connected to server");
+        base.OnClientConnect(conn);
+
+        OnClientConnected?.Invoke();
+        if(SceneManager.GetActiveScene().buildIndex == 0) {
+            ClientScene.AddPlayer(conn);
+        }
+
     }
 
     public override void OnStopClient() {
@@ -55,46 +105,36 @@ public class LobbyNetworkManager : NetworkManager{
 
     }
 
-    public override void OnClientConnect(NetworkConnection conn) {
-        base.OnClientConnect(conn);
-
-        OnClientConnected?.Invoke();
-    }
-
     public override void OnClientDisconnect(NetworkConnection conn) {
         base.OnClientDisconnect(conn);
 
         lobbyPlayers.Clear();
 
         OnClientDisconnected?.Invoke();
-    }
-    
-    //disconnect the client trying to connect if the maximum connections is exceeded or were not in the main menu
-    public override void OnServerConnect(NetworkConnection conn) {
-        if(numPlayers >= maxConnections) {
-            conn.Disconnect();
-            return;
-        }
 
-        if(SceneManager.GetActiveScene().buildIndex != 0) {
-            conn.Disconnect();
-            return;
+        if (SceneManager.GetActiveScene().buildIndex == 1) {
+            SceneManager.LoadScene(0);
         }
     }
+
+    
 
     public override void OnServerAddPlayer(NetworkConnection conn) {
+        Debug.Log("[LobbyNetworkManager] Adding player object");
         if(SceneManager.GetActiveScene().buildIndex == 0) {
             bool isLeader = lobbyPlayers.Count == 0;
 
             //instantiate lobby player and add to lobby players list
             LobbyPlayer lobbyPlayerInstance = Instantiate(lobbyPlayerPrefab, lobbyPlayerListPanel);
 
-            StartCoroutine(PositionPlayers(lobbyPlayerInstance));
-
+            if (isLeader) {
+                Debug.Log("[LobbyNetworkManager] Setting isLeader to true");
+            }
             lobbyPlayerInstance.IsLeader = isLeader;
 
             NetworkServer.AddPlayerForConnection(conn, lobbyPlayerInstance.gameObject);
 
+            StartCoroutine(PositionPlayers(lobbyPlayerInstance));
         }
 
     }
@@ -118,41 +158,59 @@ public class LobbyNetworkManager : NetworkManager{
         lobbyPlayers.Clear();
     }
 
+    //[Server]
     public override void ServerChangeScene(string newSceneName) {
-
-        Debug.Log("Changing scene from: " + SceneManager.GetActiveScene().buildIndex + " to " + newSceneName);
+        
+        Debug.Log("[LobbyNetworkManager] Changing scene from: " + SceneManager.GetActiveScene().buildIndex + " to " + newSceneName);
 
         if (SceneManager.GetActiveScene().buildIndex == 0 && newSceneName == "MainScene") {
             for (int playerIndex = lobbyPlayers.Count - 1; playerIndex >= 0; playerIndex--) {
-                Debug.Log("Spawning player: " + playerIndex);
+                Debug.Log("[LobbyNetworkManager] Spawning player: " + playerIndex);
                 var conn = lobbyPlayers[playerIndex].connectionToClient;
                 var playerInstance = Instantiate(mazePlayerPrefab);
                 playerInstance.GetComponent<PlayerController>().DisplayName = lobbyPlayers[playerIndex].DisplayName;
 
-                NetworkServer.Destroy(conn.identity.gameObject);
-                //NetworkServer.ReplacePlayerForConnection(conn, playerInstance.gameObject, true);
 
+                GameObject oldPlayer = conn.identity.gameObject;
+                NetworkServer.ReplacePlayerForConnection(conn, playerInstance.gameObject);
+                NetworkServer.Destroy(oldPlayer);
             }
         }
 
         base.ServerChangeScene(newSceneName);
 
-        Debug.Log("NetworkManager: Spawning spawn manager");
-        GameObject spawnManagerInstance = Instantiate(spawnManagerPrefab);
-        //spawn spawnManager for all clients giving authority to the server
-        NetworkServer.Spawn(spawnManagerInstance);
     }
 
     public override void OnServerSceneChanged(string sceneName) {
 
 
+        Debug.Log("[LobbyNetworkManager] Spawning spawn manager");
+        //GameObject spawnManagerInstance = Instantiate(spawnManagerPrefab);
+        //spawn spawnManager for all clients giving authority to the server
+        //NetworkServer.Spawn(spawnManagerInstance);
+
+        Debug.Log("[LobbyNetworkManager] Server scene was changed");
+        mazeGenerator = Instantiate(mazeGeneratorPrefab);
+        NetworkServer.Spawn(mazeGenerator);
 
     }
 
-    public override void OnServerReady(NetworkConnection conn) {
-        base.OnServerReady(conn);
+    private void PositionPlayers() {
+        Debug.Log("[LobbyNetworkManager] Positioning players");
+        Transform playersParent = GameObject.Find("Players").transform;
+        GameObject[] players = GameObject.FindGameObjectsWithTag("Player");
 
-        OnClientReady?.Invoke(conn);
+        for(int playerIndex = 0; playerIndex < players.Length; playerIndex++) {
+            players[playerIndex].transform.position = GetSpawnPoint();
+            players[playerIndex].transform.position += Vector3.up;
+            players[playerIndex].transform.SetParent(playersParent);
+            players[playerIndex].GetComponent<PlayerController>().ResetMobility();
+
+        }
+    }
+
+    public Vector3 GetSpawnPoint() {
+        return mazeGenerator.GetComponent<MazeGenerator>().GetUnusedSpawnPoint();
     }
 
 }

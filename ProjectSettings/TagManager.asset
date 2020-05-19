@@ -14,9 +14,9 @@ TagManager:
   - 
   - 
   - wall
-  - 
-  - 
-  - 
+  - player
+  - playerDetection
+  - item
   - 
   - 
   - 

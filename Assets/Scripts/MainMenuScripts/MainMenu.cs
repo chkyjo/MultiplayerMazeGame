@@ -22,7 +22,12 @@ public class MainMenu : MonoBehaviour{
     }
 
     public void SetEnabledStartButton(bool value) {
+        Debug.Log("[MainMenu] Setting leader buttons: " + value);
         startGameButton.SetActive(value);
         cancelHostButton.SetActive(value);
+    }
+
+    public void LeaderMode() {
+        startGameButton.SetActive(true);
     }
 }

@@ -12,12 +12,14 @@ public class SpawnManager : NetworkBehaviour {
 
     public override void OnStartServer() {
         Debug.Log("[SpawnManager] SpawnManager: active on server ");
-        LobbyNetworkManager.OnClientReady += SpawnPlayer;
+        LobbyNetworkManager networkManager = LobbyNetworkManager.singleton as LobbyNetworkManager;
+        LobbyNetworkManager.OnServerReadied += SpawnPlayer;
     }
 
     [ServerCallback]
-    private void OnDestroy() => LobbyNetworkManager.OnClientReady -= SpawnPlayer;
+    private void OnDestroy() => LobbyNetworkManager.OnServerReadied -= SpawnPlayer;
 
+    [Server]
     private void SpawnPlayer(NetworkConnection conn) {
         if(spawnPointsUsed == null) {
             spawnPointsUsed = new List<int>();
@@ -25,23 +27,26 @@ public class SpawnManager : NetworkBehaviour {
         Debug.Log("[SpawnManager] Spawning player");
         int maxIndex = MazeGenerator.Instance.rows * MazeGenerator.Instance.columns;
 
-        int spawnLocation = Random.Range(0, maxIndex);
+        int spawnLocation;
 
         bool newSpawn = true;
 
         do {
             newSpawn = true;
+            spawnLocation = Random.Range(0, maxIndex);
+
+            //check if same as other used spawn points
             for (int spawnIndex = 0; spawnIndex < spawnPointsUsed.Count; spawnIndex++) {
                 if (spawnLocation == spawnPointsUsed[spawnIndex]) {
                     newSpawn = false;
                 }
             }
-        } while (newSpawn);
+        } while (!newSpawn);
 
         spawnPointsUsed.Add(spawnLocation);
 
         Vector3 position = MazeGenerator.Instance.GetCellLocation(spawnLocation);
-
+        //conn.identity.gameObject.transform.position = position;
         GameObject playerInstance = Instantiate(playerPrefab, position, Quaternion.identity);
         NetworkServer.Spawn(playerInstance, conn);
 

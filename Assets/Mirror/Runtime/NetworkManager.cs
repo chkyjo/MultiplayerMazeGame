@@ -117,7 +117,7 @@ namespace Mirror
         /// <para>Default value is 60 seconds.</para>
         /// </summary>
         [Tooltip("Timeout in seconds since last message from a client after which server will auto-disconnect if Disconnect Inactive Connections is enabled.")]
-        public float disconnectInactiveTimeout = 600f;
+        public float disconnectInactiveTimeout = 60f;
 
         [Header("Authentication")]
         [Tooltip("Authentication component attached to this object")]
@@ -539,7 +539,7 @@ namespace Mirror
             // DO NOT do this earlier. it would cause race conditions where a
             // client will do things before the server is even fully started.
             if (LogFilter.Debug) Debug.Log("StartHostClient called");
-            //StartHostClient();
+            StartHostClient();
         }
 
         void StartHostClient()

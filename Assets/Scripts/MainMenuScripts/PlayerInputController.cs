@@ -30,11 +30,15 @@ public class PlayerInputController : MonoBehaviour{
         string defaultName = PlayerPrefs.GetString(PlayerPrefsNameKey);
 
         nameInputField.text = defaultName;
-
-        SetPlayerName(defaultName);
     }
 
     public void SetPlayerName(string name) {
+        if(name != "") {
+            DisplayName = name;
+        }
+    }
+
+    public void OnInputChange(string name) {
         continueButton.interactable = !string.IsNullOrEmpty(nameInputField.text);
     }
 

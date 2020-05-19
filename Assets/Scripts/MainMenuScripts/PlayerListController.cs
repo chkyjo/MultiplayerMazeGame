@@ -4,7 +4,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class PlayerListController : MonoBehaviour{
+public class PlayerListController : NetworkBehaviour{
 
     public Transform joinedPlayersPanel;
 
@@ -46,11 +46,11 @@ public class PlayerListController : MonoBehaviour{
 
     public void StartGame(string sceneName) {
         for(int playerIndex = 0; playerIndex < joinedPlayersPanel.childCount; playerIndex++) {
-            if (joinedPlayersPanel.GetChild(playerIndex).GetComponent<LobbyPlayer>().hasAuthority) {
-                joinedPlayersPanel.GetChild(playerIndex).GetComponent<LobbyPlayer>().StartGame();
-            }
+            joinedPlayersPanel.GetChild(playerIndex).GetComponent<LobbyPlayer>().StartGame();
         }
     }
+
+
 
 
 }
