@@ -22,6 +22,7 @@ public class LobbyNetworkManager : NetworkManager{
 
     [SerializeField]
     private PlayerListController playerListController;
+    private int numPlayers;
 
     [SerializeField]
     private GameObject spawnManagerPrefab;
@@ -162,6 +163,7 @@ public class LobbyNetworkManager : NetworkManager{
     public override void ServerChangeScene(string newSceneName) {
         
         Debug.Log("[LobbyNetworkManager] Changing scene from: " + SceneManager.GetActiveScene().buildIndex + " to " + newSceneName);
+        numPlayers = lobbyPlayers.Count;
 
         if (SceneManager.GetActiveScene().buildIndex == 0 && newSceneName == "MainScene") {
             for (int playerIndex = lobbyPlayers.Count - 1; playerIndex >= 0; playerIndex--) {
@@ -213,4 +215,7 @@ public class LobbyNetworkManager : NetworkManager{
         return mazeGenerator.GetComponent<MazeGenerator>().GetUnusedSpawnPoint();
     }
 
+    public int GetNumPlayers() {
+        return numPlayers;
+    }
 }

@@ -1,4 +1,5 @@
-﻿using Mirror;
+﻿using Boo.Lang;
+using Mirror;
 using UnityEngine;
 
 public class WallCollisionHandler : NetworkBehaviour{
@@ -6,8 +7,20 @@ public class WallCollisionHandler : NetworkBehaviour{
     public int wallIndex; //0 - forward, 1 - right ...
     public PlayerController playerController;
 
+    List<GameObject> frontWalls;
+    List<GameObject> rightWalls;
+    List<GameObject> backWalls;
+    List<GameObject> leftWalls;
+
     private void Start() {
+        
         playerController = GetComponentInParent<PlayerController>();
+        if (playerController.isServer) {
+            frontWalls = new List<GameObject>();
+            rightWalls = new List<GameObject>();
+            backWalls = new List<GameObject>();
+            leftWalls = new List<GameObject>();
+        }
     }
 
     public void OnTriggerEnter(Collider other) {
@@ -43,7 +56,9 @@ public class WallCollisionHandler : NetworkBehaviour{
 
                 return;
             }
+        }
 
+        if (playerController.isServer) {
             if (wallIndex == 0) {
                 playerController.forward = false;
             }
@@ -67,6 +82,12 @@ public class WallCollisionHandler : NetworkBehaviour{
                 other.GetComponent<MeshRenderer>().enabled = false;
                 return;
             }
+        }
+
+
+
+        if (playerController.isServer) {
+
             if (wallIndex == 0) {
                 GetComponentInParent<PlayerController>().forward = true;
             }
