@@ -54,9 +54,17 @@ public class GameManager : NetworkBehaviour{
 
         ItemSpawnManager itemSpawnManager = GetComponent<ItemSpawnManager>();
 
-        for(int itemIndex = 0; itemIndex < 10; itemIndex++) {
-            Vector3 spawnPosition = mazeGenerator.GetUnusedSpawnPoint();
+        Vector3 spawnPosition;
+
+        for (int itemIndex = 0; itemIndex < 10; itemIndex++) {
+            spawnPosition = mazeGenerator.GetUnusedSpawnPoint();
             itemSpawnManager.SpawnItem(spawnPosition);
+        }
+
+        for (int itemIndex = 0; itemIndex < 5; itemIndex++) {
+            spawnPosition = mazeGenerator.GetUnusedSpawnPoint();
+            spawnPosition += Vector3.up * 0.6f;
+            itemSpawnManager.SpawnAdvancedPistol(spawnPosition);
         }
 
     }
@@ -73,7 +81,7 @@ public class GameManager : NetworkBehaviour{
         
         while (true) {
             Debug.Log("[GameManager] Player with " + playersParent.childCount + " players");
-            for (int playerIndex = 1; playerIndex < playersParent.childCount; playerIndex++) {
+            for (int playerIndex = 0; playerIndex < playersParent.childCount; playerIndex++) {
 
                 //set up next player
                 currentPlayer = playersParent.GetChild(playerIndex).GetComponent<PlayerController>();

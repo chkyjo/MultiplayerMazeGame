@@ -3,7 +3,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
-using UnityEditor.Experimental.GraphView;
 using UnityEngine;
 
 public class MazeGenerator : NetworkBehaviour{
@@ -17,7 +16,10 @@ public class MazeGenerator : NetworkBehaviour{
     public GameObject backWall;
     public GameObject leftWall;
 
+    public GameObject pillar;
     public GameObject pillars;
+    public GameObject pyramidPrefab;
+    GameObject pyramidInstance;
 
     public GameObject searchedIndicator;
 
@@ -55,12 +57,15 @@ public class MazeGenerator : NetworkBehaviour{
             cells = new MazeCell[rows * columns];
             unitSize = 6;
             AddWalls();
-            AddPillars();
+            SpawnPyramid();
 
             CreatePaths((rows / 2) * (columns / 2));
+
             int average = Mathf.CeilToInt((rows + columns) / 2);
             average *= Mathf.FloorToInt(average / 3);
             RemoveRandomWalls(average);
+
+            AddPillars();
         }
         else {
             Debug.Log("[MazeGenerator] Registering maze components");
@@ -69,6 +74,7 @@ public class MazeGenerator : NetworkBehaviour{
             ClientScene.RegisterPrefab(backWall);
             ClientScene.RegisterPrefab(leftWall);
             ClientScene.RegisterPrefab(pillars);
+            ClientScene.RegisterPrefab(pyramidPrefab);
         }
     }
 
@@ -132,15 +138,32 @@ public class MazeGenerator : NetworkBehaviour{
     }
 
     void AddPillars() {
-        Vector3 unitPosition = Vector3.zero;
-        GameObject pillar;
+        Vector3 unitPosition = new Vector3(-3, 0, -3);
+        GameObject pillarInstance;
 
-        for(int rowIndex = 0; rowIndex < rows; rowIndex += 2) {
-            unitPosition.z = rowIndex * unitSize;
-            for (int columnIndex = 0; columnIndex < columns; columnIndex += 2) {
-                unitPosition.x = columnIndex * unitSize;
-                pillar = Instantiate(pillars, unitPosition, Quaternion.identity, mazeParent.transform);
-                NetworkServer.Spawn(pillar);
+        for(int rowIndex = 0; rowIndex <= rows; rowIndex++) {
+            unitPosition.z = rowIndex * unitSize - unitSize/2;
+            for (int columnIndex = 0; columnIndex <= columns; columnIndex++) {
+
+                bool spawn = true;
+
+                //if inner pillar
+                if(rowIndex > 0 && rowIndex < rows && columnIndex > 0 && columnIndex < columns) {
+                    //if the right and bottom walls of the upper left cell and left and top walls of the lower right cell are not active downt spawn
+                    if(!cells[rowIndex * columns + columnIndex - 1].walls[1].activeInHierarchy &&
+                        !cells[rowIndex * columns + columnIndex - 1].walls[2].activeInHierarchy &&
+                        !cells[(rowIndex - 1) * columns + columnIndex].walls[0].activeInHierarchy &&
+                        !cells[(rowIndex - 1) * columns + columnIndex].walls[3].activeInHierarchy) {
+                        spawn = false;
+                    }
+                }
+
+                if (spawn) {
+                    unitPosition.x = columnIndex * unitSize - unitSize / 2;
+                    pillarInstance = Instantiate(pillar, unitPosition, Quaternion.identity, mazeParent.transform);
+                    NetworkServer.Spawn(pillarInstance);
+                }
+
             }
         }
 
@@ -230,6 +253,7 @@ public class MazeGenerator : NetworkBehaviour{
         }
 
         RemoveRandomWalls(randomWallsRemoved.Count);
+
     }
 
     public void RemoveRandomWalls(int numWalls) {
@@ -251,14 +275,45 @@ public class MazeGenerator : NetworkBehaviour{
         }
     }
 
-    public Vector3 GetUnusedSpawnPoint() {
+    public void SpawnPyramid() {
+        int median = (rows * columns) / 2;
+        Vector3 position = GetUnusedSpawnPoint(Mathf.FloorToInt(median - columns / 2), Mathf.CeilToInt(median + columns / 2));
+
+        pyramidInstance = Instantiate(pyramidPrefab, position, Quaternion.identity);
+        NetworkServer.Spawn(pyramidInstance);
+
+        //get the cell spawned in and disable walls
+        int locationIndex = usedSpawnPoints[usedSpawnPoints.Count - 1];
+        MazeCell cell = cells[locationIndex];
+        cell.walls[0].SetActive(false);
+        cell.walls[1].SetActive(false);
+        cell.walls[2].SetActive(false);
+        cell.walls[3].SetActive(false);
+
+        //get the cell 1 row and column behind
+        cell = cells[locationIndex - 1 - columns];
+        cell.walls[0].SetActive(false);
+        cell.walls[1].SetActive(false);
+
+        //get the cell 1 row and column ahead
+        cell = cells[locationIndex + 1 + columns];
+        cell.walls[2].SetActive(false);
+        cell.walls[3].SetActive(false);
+    }
+
+    public Vector3 GetUnusedSpawnPoint(int lowIndex = 0, int highIndex = 0) {
         int locationIndex;
 
         bool newSpawn;
 
         do {
             newSpawn = true;
-            locationIndex = UnityEngine.Random.Range(0, rows * columns);
+            if(lowIndex == 0 && highIndex == 0) {
+                locationIndex = UnityEngine.Random.Range(0, rows * columns);
+            }
+            else {
+                locationIndex = UnityEngine.Random.Range(lowIndex, highIndex);
+            }
 
             //check if same as other used spawn points
             for (int spawnIndex = 0; spawnIndex < usedSpawnPoints.Count; spawnIndex++) {
@@ -273,7 +328,47 @@ public class MazeGenerator : NetworkBehaviour{
         return cells[locationIndex].position;
     }
 
+    public Vector3 GetUnOccupiedSpawnPoint() {
+        Transform playersParent = GameObject.Find("Players").transform;
+        int locationIndex;
+        bool unOccupied;
+
+        do {
+            unOccupied = true;
+            locationIndex = UnityEngine.Random.Range(0, rows * columns);
+
+            //check if another player is at that position
+            for (int playerIndex = 0; playerIndex < playersParent.childCount; playerIndex++) {
+                if (cells[locationIndex].position == playersParent.GetChild(playerIndex).position - Vector3.up){
+                    Debug.Log("[MazeGenerator] Another player was at the position: " + cells[locationIndex].position);
+                    unOccupied = false;
+                }
+            }
+        } while (!unOccupied);
+
+        return cells[locationIndex].position;
+    }
+
+    public void CreateExit(int exitIndex) {//backleft, backright, frontleft, frontright
+        if(exitIndex == 0) {
+            Destroy(cells[0].walls[3]);
+        }
+        else if(exitIndex == 1) {
+            Destroy(cells[columns].walls[1]);
+        }
+        else if (exitIndex == 2) {
+            Destroy(cells[(rows - 1) * columns].walls[3]);
+        }
+        else if (exitIndex == 3) {
+            Destroy(cells[rows * columns - 1].walls[1]);
+        }
+    }
+
     public Vector3 GetCellLocation(int cellIndex) {
         return cells[cellIndex].position;
+    }
+
+    public GameObject GetPyramid() {
+        return pyramidInstance;
     }
 }

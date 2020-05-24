@@ -18,6 +18,9 @@ public class BodyTriggerHandler : NetworkBehaviour{
             if (other.name == "Item(Clone)") {
                 GetComponentInParent<PlayerController>().PickUpItem(other.gameObject);
             }
+            if(other.name == "AdvancedPistol(Clone)") {
+                GetComponentInParent<PlayerController>().PickUpWeapon(other.gameObject);
+            }
         }
     }
 

@@ -7530,6 +7530,9 @@ MonoBehaviour:
   - {fileID: 8218337907304430476, guid: 9a3eaf1e72e105040bc7631d5e022210, type: 3}
   - {fileID: 70159619934279078, guid: ce3d1d618099969458266c3213aa1f62, type: 3}
   - {fileID: 3204094691022810724, guid: 99fe0ef830ed8d741bfb970b0a7a570c, type: 3}
+  - {fileID: 3045593135940095273, guid: 6d66d2dff983ff04d9741aba23dcc7e3, type: 3}
+  - {fileID: 6062607578420442985, guid: 9ad527bc2f92da04f880a7bf2c5ba2b2, type: 3}
+  - {fileID: 6243275399268614255, guid: bf780a9ce088aa14d962047878d1b2f0, type: 3}
   menuScene: Assets/Scenes/MainMenu.unity
   lobbyPlayerPrefab: {fileID: 5335680371884695983, guid: 80baf5f97ea1d5c41a75472102227d3f,
     type: 3}

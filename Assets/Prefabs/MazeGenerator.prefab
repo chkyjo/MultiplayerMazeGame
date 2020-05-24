@@ -44,6 +44,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f08fa5d6598f11c4d9b9979b1ff180cd, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  syncMode: 0
+  syncInterval: 0.1
   mazeParent: {fileID: 0}
   frontWall: {fileID: 70159619934279078, guid: ce3d1d618099969458266c3213aa1f62, type: 3}
   rightWall: {fileID: 2167226610062270491, guid: 715a62927f3afd44dbb5faf4bdba4485,
@@ -52,7 +54,10 @@ MonoBehaviour:
     type: 3}
   leftWall: {fileID: 8218337907304430476, guid: 9a3eaf1e72e105040bc7631d5e022210,
     type: 3}
+  pillar: {fileID: 6062607578420442985, guid: 9ad527bc2f92da04f880a7bf2c5ba2b2, type: 3}
   pillars: {fileID: 3585257310787524265, guid: 882fe6ee37d9ebe4eb76728ab7eca715, type: 3}
+  pyramidPrefab: {fileID: 3045593135940095273, guid: 6d66d2dff983ff04d9741aba23dcc7e3,
+    type: 3}
   searchedIndicator: {fileID: 3219120233769689354, guid: d88d098b8e95a274992e293da2b94ba3,
     type: 3}
   rows: 15

@@ -13,6 +13,7 @@ public class PlayerController : NetworkBehaviour{
 
     bool currentPlayer = false;
 
+    GameObject forwardObject;
     public bool forward = true;
     public bool right = true;
     public bool back = true;
@@ -24,13 +25,24 @@ public class PlayerController : NetworkBehaviour{
 
     private string displayName = null;
 
+    [SyncVar()]
+    private int _health;
+
     GameObject itemToPickUp;
     List<GameObject> items;
+
+    GameObject weaponObject;
+    Weapon weapon;
+    bool carrying = false;
 
     bool detected = false;
     bool visible = false;
 
+    int numKeys = 0;
+
     private void Awake() {
+        weapon = null;
+        _health = 100;
         GameManager.gameManagerActive += GameManagerActive;
         DontDestroyOnLoad(gameObject);
     }
@@ -63,8 +75,8 @@ public class PlayerController : NetworkBehaviour{
 
     IEnumerator ListenForInput() {
         while (true) {
-            camera.transform.position = transform.position + transform.up * 7 + transform.forward * -3;
-            camera.transform.LookAt(transform);
+            camera.transform.position = transform.position + transform.up * 7 + transform.forward * -2;
+            camera.transform.LookAt(transform.position + transform.forward * 2);
 
             if(!moving && !rotating) {
                 if (Input.GetKey(KeyCode.W)) {
@@ -83,7 +95,27 @@ public class PlayerController : NetworkBehaviour{
                 if (Input.GetKeyDown(KeyCode.F)) {
                     CmdPlaceTrap();
                 }
+
+                if (Input.GetKeyDown(KeyCode.E)) {
+                    if(forwardObject != null) {
+                        if(forwardObject.name == "Pyramid(Clone)") {
+                            CmdInsertKey(forwardObject.transform.position);
+                        }
+                    }
+                    else {
+                        Debug.Log("[PlayerController] forward object is null");
+                    }
+                }
+
+                if (Input.GetKeyDown(KeyCode.Space)) {
+                    CmdUseWeapon();
+                }
+                if (Input.GetKeyDown(KeyCode.Q)) {
+                    DropWeapon();
+                }
             }
+
+
 
 
             yield return null;
@@ -124,6 +156,7 @@ public class PlayerController : NetworkBehaviour{
         LobbyManager.gamePlayers.Remove(this);
     }
 
+    //run on client
     IEnumerator EnemyDetection() {
         RaycastHit hit;
         Ray forwardRay;
@@ -133,10 +166,14 @@ public class PlayerController : NetworkBehaviour{
         while (true) {
 
             forwardRay = new Ray(transform.position + transform.forward, transform.forward);
+            forwardObject = null;
             if (Physics.Raycast(forwardRay, out hit, 6)) {
                 if (hit.collider.name == "Capsule") {
                     Debug.DrawRay(transform.position + transform.forward, transform.forward * hit.distance, Color.red);
                     hit.collider.GetComponentInParent<PlayerController>().Discover();
+                }
+                else if(hit.collider.name == "Pyramid(Clone)") {
+                    forwardObject = hit.collider.gameObject;
                 }
             }
             else {
@@ -180,6 +217,7 @@ public class PlayerController : NetworkBehaviour{
         }
     }
 
+    //run on server
     IEnumerator WallDetection() {
         RaycastHit hit;
         Ray forwardRay;
@@ -243,6 +281,138 @@ public class PlayerController : NetworkBehaviour{
 
             yield return new WaitForFixedUpdate();
         }
+    }
+
+    public void PickUpWeapon(GameObject weap) {
+        CmdPickUpWeapon(weap);
+    }
+
+    [Command]
+    void CmdPickUpWeapon(GameObject weap) {
+        if(weapon == null) {
+            RpcPickUpWeapon(weap);
+        }
+        else {
+            Debug.Log("[PlayerController] Server: Weapon was not null, cannot pick up weapon");
+        }
+    }
+
+    [ClientRpc]
+    void RpcPickUpWeapon(GameObject weap) {
+        weaponObject = weap;
+        weapon = weap.GetComponent<WeaponController>().GetWeapon();
+
+        StartCoroutine(CarryWeapon(weap));
+    }
+
+    IEnumerator CarryWeapon(GameObject weap) {
+        carrying = true;
+        while (carrying) {
+            weap.transform.position = transform.position + 0.65f * transform.right;
+            weap.transform.rotation = transform.rotation;
+            yield return new WaitForFixedUpdate();
+        }
+    }
+
+    void DropWeapon() {
+        if(weapon != null) {
+            weapon = null;
+            CmdDropWeapon();
+        }
+        else {
+            Debug.Log("[PlayerController] Weapon was null on client");
+        }
+    }
+
+    [Command]
+    void CmdDropWeapon() {
+        if (weapon != null) {
+            Destroy(weaponObject);
+            weapon = null;
+        }
+        else {
+            Debug.Log("[PlayerController] Weapon was null on server");
+        }
+    }
+
+    [Command]
+    private void CmdUseWeapon() {
+        Debug.Log("[PlayerController] Using weapon");
+
+        if(weapon != null) {
+            RpcUseWeapon(weapon.GetDamage());
+        }
+        else {
+            Debug.Log("[PlayerController] weapon was null");
+        }
+    }
+
+    [ClientRpc]
+    private void RpcUseWeapon(int damage) {
+        Ray forwardRay = new Ray(transform.position + transform.forward, transform.forward);
+        RaycastHit hit;
+
+        if (Physics.Raycast(forwardRay, out hit, 12)) {
+            Debug.DrawRay(transform.position + transform.forward, transform.forward * hit.distance, Color.red);
+            Debug.Log("[PlayerController] Client: " + DisplayName + " forward ray hit " + hit.collider.name);
+            if (hit.collider.name == "Capsule") {
+                hit.collider.transform.parent.GetComponent<PlayerController>().TakeDamage(damage);
+            }
+        }
+
+        //DropWeapon();
+    }
+
+    private void CmdInsertKey(Vector3 pyramidLocation) {
+
+        if(numKeys == 0) {
+            Debug.Log("[PlayerController] Player has no keys");
+            //return;
+        }
+
+        RaycastHit hit;
+        Ray forwardRay = new Ray(transform.position + Vector3.forward, Vector3.forward);
+        Ray rightRay = new Ray(transform.position + Vector3.right, Vector3.right);
+        Ray backRay = new Ray(transform.position + Vector3.back, Vector3.back);
+        Ray leftRay = new Ray(transform.position + Vector3.left, Vector3.left);
+
+        //if player is on the front side of the pyramid
+        if (Physics.Raycast(backRay, out hit, 6)) {
+            if (hit.collider.name == "Pyramid(Clone)") {
+                Debug.Log("[PlayerController] Attempting to insert key on top");
+                MazeGenerator.Instance.GetPyramid().GetComponent<PyramidController>().AddKeyToTop();
+            }
+        }
+        //else
+        //if player is on the left side of the pyramid
+        if (Physics.Raycast(rightRay, out hit, 6)) {
+            if (hit.collider.name == "Pyramid(Clone)") {
+                Debug.Log("[PlayerController] Attempting to insert key on left");
+                MazeGenerator.Instance.GetPyramid().GetComponent<PyramidController>().AddKeyToLeft();
+            }
+        }
+        //else
+        //if player is on the back side of the pyramid
+        if (Physics.Raycast(forwardRay, out hit, 6)) {
+            if (hit.collider.name == "Pyramid(Clone)") {
+                Debug.Log("[PlayerController] Attempting to insert key on bottom");
+                MazeGenerator.Instance.GetPyramid().GetComponent<PyramidController>().AddKeyToBottom();
+            }
+        }
+        //else
+        //if player is on the right side of the pyramid
+        if (Physics.Raycast(leftRay, out hit, 6)) {
+            if (hit.collider.name == "Pyramid(Clone)") {
+                Debug.Log("[PlayerController] Attempting to insert key on right");
+                MazeGenerator.Instance.GetPyramid().GetComponent<PyramidController>().AddKeyToRight();
+            }
+        }
+        else {
+            //Debug.Log("[PlayerController] Player was not on any side of the pyramid... Pyramid location: " + pyramidLocation + " playerLocation: " + transform.position);
+        }
+
+
+
     }
 
     public void Discover() {
@@ -356,6 +526,7 @@ public class PlayerController : NetworkBehaviour{
         Debug.Log("[PlayerController] Server: Picking up item " + item.name);
         items.Add(item);
         item.SetActive(false);
+        numKeys++;
         TargetPickUpItem(target.GetComponent<NetworkIdentity>().connectionToClient);
     }
 
@@ -374,6 +545,19 @@ public class PlayerController : NetworkBehaviour{
         itemSpawnManager.SpawnTrap(transform.position);
     }
 
+    public void TakeDamage(int damage) {
+        CmdTakeDamage(damage);
+    }
+
+    [Command]
+    private void CmdTakeDamage(int damage) {
+        Debug.Log("[PlayerController] Dealing " + damage + " to player: " + DisplayName);
+        _health -= damage;
+        if(_health <= 0) {
+            Die();
+        }
+    }
+
     private LobbyNetworkManager lobbyManager;
     private LobbyNetworkManager LobbyManager {
         get {
@@ -390,7 +574,11 @@ public class PlayerController : NetworkBehaviour{
     }
 
     public void Die() {
-        transform.position = LobbyManager.GetSpawnPoint();
+        transform.position = MazeGenerator.Instance.GetUnOccupiedSpawnPoint();
+        _health = 100;
+        if(numKeys > 0) {
+            numKeys--;
+        }
     }
 
     private void CmdKillPlayer() {
